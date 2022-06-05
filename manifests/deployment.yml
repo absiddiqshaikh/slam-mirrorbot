@@ -1,0 +1,19 @@
+apiVersion : apps/v1
+kind: Deployment
+metadata:
+  name: "xerytelegram001-5314"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: "xerytelegram001-5314"
+  template:
+    metadata:
+      labels:
+        app: "xerytelegram001-5314"
+    spec:
+      containers:
+        - name: "xerytelegram001-5314"
+          image: "xeryslambot001.azurecr.io/xerytelegram001"
+          ports:
+          - containerPort: 80
