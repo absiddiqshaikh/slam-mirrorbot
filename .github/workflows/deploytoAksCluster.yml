@@ -1,0 +1,63 @@
+on: [push]
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+    
+    - uses: actions/checkout@master
+    
+    - uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Create ACR
+      id: create-acr
+      run: |
+        az acr create -n xeryslambot001 -g xeryslambot001bda6-rg --location "UK South" --sku Standard --admin-enabled
+        echo "::set-output name=acr_username::`az acr credential show -n xeryslambot001 --query username | xargs`"
+        echo "::set-output name=acr_password::`az acr credential show -n xeryslambot001 --query passwords[0].value | xargs`"
+        echo "::add-mask::`az acr credential show -n xeryslambot001 --query passwords[0].value | xargs`"
+
+    - uses: azure/docker-login@v1
+      with:
+        login-server: xeryslambot001.azurecr.io
+        username: ${{ steps.create-acr.outputs.acr_username }}
+        password: ${{ steps.create-acr.outputs.acr_password }}
+
+    - name: Build and push image to ACR
+      id: build-image
+      run: |
+        docker build "$GITHUB_WORKSPACE/" -f  "Dockerfile" -t xeryslambot001.azurecr.io/xerytelegram001:${{ github.sha }} --label dockerfile-path=Dockerfile
+        docker push xeryslambot001.azurecr.io/xerytelegram001:${{ github.sha }}
+    
+    - uses: azure/k8s-set-context@v1
+      id: login
+      with:
+         kubeconfig: ${{ secrets.aks_xerytelegram001_kubeConfig }}
+    
+    - name: Create namespace
+      run: |
+        namespacePresent=`kubectl get namespace | grep xeryslam001 | wc -l`
+        if [ $namespacePresent -eq 0 ]
+        then
+            echo `kubectl create namespace xeryslam001`
+        fi
+
+    - uses: azure/k8s-create-secret@v1
+      with:
+        namespace: xeryslam001
+        container-registry-url: xeryslambot001.azurecr.io
+        container-registry-username: ${{ steps.create-acr.outputs.acr_username }}
+        container-registry-password: ${{ steps.create-acr.outputs.acr_password }}
+        secret-name: xerytelegramdockerauth
+       
+    - uses: azure/k8s-deploy@v1.2
+      with:
+        namespace: xeryslam001
+        manifests: |
+          manifests/deployment.yml
+          manifests/service.yml
+        images: |
+          xeryslambot001.azurecr.io/xerytelegram001:${{ github.sha }}
+        imagepullsecrets: |
+          xerytelegramdockerauth   
